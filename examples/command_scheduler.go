@@ -21,38 +21,25 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"strconv"
 
 	"github.com/gogo/protobuf/proto"
-	log "github.com/golang/glog"
-	"github.com/mesos/mesos-go/auth"
-	"github.com/mesos/mesos-go/auth/sasl"
-	"github.com/mesos/mesos-go/auth/sasl/mech"
 	mesos "github.com/mesos/mesos-go/mesosproto"
 	util "github.com/mesos/mesos-go/mesosutil"
 	sched "github.com/mesos/mesos-go/scheduler"
-	"golang.org/x/net/context"
 )
 
 const (
-	CPUS_PER_TASK       = 1
-	MEM_PER_TASK        = 128
-	defaultArtifactPort = 12345
+	CPUS_PER_TASK = 1
+	MEM_PER_TASK  = 128
 )
 
 var (
-	address      = flag.String("address", "127.0.0.1", "Binding address for artifact server")
-	artifactPort = flag.Int("artifactPort", defaultArtifactPort, "Binding port for artifact server")
-	authProvider = flag.String("mesos_authentication_provider", sasl.ProviderName,
-		fmt.Sprintf("Authentication provider to use, default is SASL that supports mechanisms: %+v", mech.ListSupported()))
-	master              = flag.String("master", "127.0.0.1:5050", "Master address <ip:port>")
-	executorPath        = flag.String("executor", "./test_executor", "Path to test executor")
-	taskCount           = flag.Int("task-count", 5, "Total task count to run.")
-	mesosAuthPrincipal  = flag.String("mesos_authentication_principal", "", "Mesos authentication principal.")
-	mesosAuthSecretFile = flag.String("mesos_authentication_secret_file", "", "Mesos authentication secret file.")
-	jobCmd              = flag.String("cmd", "while true; do echo 'hello world'; date; sleep 1; done", "Command to execute")
+	address   = flag.String("address", "127.0.0.1", "Binding address")
+	master    = flag.String("master", "127.0.0.1:5050", "Master address <ip:port>")
+	taskCount = flag.Int("task-count", 5, "Total task count to run.")
+	jobCmd    = flag.String("cmd", "while true; do echo 'hello world'; date; sleep 1; done", "Command to execute")
 )
 
 type CommandScheduler struct {
@@ -62,11 +49,11 @@ type CommandScheduler struct {
 }
 
 func (sched *CommandScheduler) Registered(driver sched.SchedulerDriver, frameworkId *mesos.FrameworkID, masterInfo *mesos.MasterInfo) {
-	log.Infoln("Framework Registered with Master ", masterInfo)
+	fmt.Println("Framework Registered with Master ", masterInfo)
 }
 
 func (sched *CommandScheduler) Reregistered(driver sched.SchedulerDriver, masterInfo *mesos.MasterInfo) {
-	log.Infoln("Framework Re-Registered with Master ", masterInfo)
+	fmt.Println("Framework Re-Registered with Master ", masterInfo)
 }
 
 func (sched *CommandScheduler) Disconnected(sched.SchedulerDriver) {}
@@ -90,7 +77,7 @@ func (sched *CommandScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 			mems += res.GetScalar().GetValue()
 		}
 
-		log.Infoln("Received Offer <", offer.Id.GetValue(), "> with cpus=", cpus, " mem=", mems)
+		fmt.Println("Received Offer <", offer.Id.GetValue(), "> with cpus=", cpus, " mem=", mems)
 
 		remainingCpus := cpus
 		remainingMems := mems
@@ -119,32 +106,32 @@ func (sched *CommandScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 					Value: proto.String(*jobCmd),
 				},
 			}
-			log.Infof("Prepared task: %s with offer %s for launch\n", task.GetName(), offer.Id.GetValue())
+			fmt.Printf("Prepared task: %s with offer %s for launch\n", task.GetName(), offer.Id.GetValue())
 
 			tasks = append(tasks, task)
 			remainingCpus -= CPUS_PER_TASK
 			remainingMems -= MEM_PER_TASK
 		}
-		log.Infoln("Launching ", len(tasks), "tasks for offer", offer.Id.GetValue())
+		fmt.Println("Launching ", len(tasks), "tasks for offer", offer.Id.GetValue())
 		driver.LaunchTasks([]*mesos.OfferID{offer.Id}, tasks, &mesos.Filters{RefuseSeconds: proto.Float64(1)})
 	}
 }
 
 func (sched *CommandScheduler) StatusUpdate(driver sched.SchedulerDriver, status *mesos.TaskStatus) {
-	log.Infoln("Status update: task", status.TaskId.GetValue(), " is in state ", status.State.Enum().String())
+	fmt.Println("Status update: task", status.TaskId.GetValue(), " is in state ", status.State.Enum().String())
 	if status.GetState() == mesos.TaskState_TASK_FINISHED {
 		sched.tasksFinished++
 	}
 
 	if sched.tasksFinished >= sched.totalTasks {
-		log.Infoln("Total tasks completed, stopping framework.")
+		fmt.Println("Total tasks completed, stopping framework.")
 		driver.Stop(false)
 	}
 
 	if status.GetState() == mesos.TaskState_TASK_LOST ||
 		status.GetState() == mesos.TaskState_TASK_KILLED ||
 		status.GetState() == mesos.TaskState_TASK_FAILED {
-		log.Infoln(
+		fmt.Println(
 			"Aborting because task", status.TaskId.GetValue(),
 			"is in unexpected state", status.State.String(),
 			"with message", status.GetMessage(),
@@ -164,44 +151,30 @@ func (sched *CommandScheduler) ExecutorLost(sched.SchedulerDriver, *mesos.Execut
 }
 
 func (sched *CommandScheduler) Error(driver sched.SchedulerDriver, err string) {
-	log.Infoln("Scheduler received error:", err)
+	fmt.Println("Scheduler received error:", err)
 }
 
 func init() {
 	flag.Parse()
-	log.Infoln("Initializing the Command Scheduler...")
+	fmt.Println("Initializing the Command Scheduler...")
 }
 
 func parseIP(address string) net.IP {
 	addr, err := net.LookupIP(address)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
 	}
 	if len(addr) < 1 {
-		log.Fatalf("failed to parse IP from address '%v'", address)
+		fmt.Printf("failed to parse IP from address '%v'", address)
 	}
 	return addr[0]
 }
 
 func main() {
 
-	// the framework
 	fwinfo := &mesos.FrameworkInfo{
-		User: proto.String(""), // Mesos-go will fill in user.
+		User: proto.String(""),
 		Name: proto.String("Go Command Scheduler"),
-	}
-
-	cred := (*mesos.Credential)(nil)
-	if *mesosAuthPrincipal != "" {
-		fwinfo.Principal = proto.String(*mesosAuthPrincipal)
-		secret, err := ioutil.ReadFile(*mesosAuthSecretFile)
-		if err != nil {
-			log.Fatal(err)
-		}
-		cred = &mesos.Credential{
-			Principal: proto.String(*mesosAuthPrincipal),
-			Secret:    secret,
-		}
 	}
 
 	bindingAddress := parseIP(*address)
@@ -214,22 +187,16 @@ func main() {
 		},
 		Framework:      fwinfo,
 		Master:         *master,
-		Credential:     cred,
 		BindingAddress: bindingAddress,
-		WithAuthContext: func(ctx context.Context) context.Context {
-			ctx = auth.WithLoginProvider(ctx, *authProvider)
-			ctx = sasl.WithBindingAddress(ctx, bindingAddress)
-			return ctx
-		},
 	}
 	driver, err := sched.NewMesosSchedulerDriver(config)
 
 	if err != nil {
-		log.Errorln("Unable to create a SchedulerDriver ", err.Error())
+		fmt.Println("Unable to create a SchedulerDriver ", err.Error())
 	}
 
 	if stat, err := driver.Run(); err != nil {
-		log.Infof("Framework stopped with status %s and error: %s\n", stat.String(), err.Error())
+		fmt.Printf("Framework stopped with status %s and error: %s\n", stat.String(), err.Error())
 	}
 
 }
