@@ -41,23 +41,23 @@ var (
 	orgFile = flag.String("f", "", "Org mode file to run")
 )
 
-type CommandScheduler struct {
+type OrgBabelScheduler struct {
 	tasksLaunched int
 	tasksFinished int
 	blocks        []*org.OrgSrcBlock
 }
 
-func (sched *CommandScheduler) Registered(driver sched.SchedulerDriver, frameworkId *mesos.FrameworkID, masterInfo *mesos.MasterInfo) {
+func (sched *OrgBabelScheduler) Registered(driver sched.SchedulerDriver, frameworkId *mesos.FrameworkID, masterInfo *mesos.MasterInfo) {
 	fmt.Println("[REGIST] Framework Registered with Master ", masterInfo)
 }
 
-func (sched *CommandScheduler) Reregistered(driver sched.SchedulerDriver, masterInfo *mesos.MasterInfo) {
+func (sched *OrgBabelScheduler) Reregistered(driver sched.SchedulerDriver, masterInfo *mesos.MasterInfo) {
 	fmt.Println("[REGIS2] Framework Re-Registered with Master ", masterInfo)
 }
 
-func (sched *CommandScheduler) Disconnected(sched.SchedulerDriver) {}
+func (sched *OrgBabelScheduler) Disconnected(sched.SchedulerDriver) {}
 
-func (sched *CommandScheduler) ResourceOffers(driver sched.SchedulerDriver, offers []*mesos.Offer) {
+func (sched *OrgBabelScheduler) ResourceOffers(driver sched.SchedulerDriver, offers []*mesos.Offer) {
 
 	// We will get many resource offerings,
 	// but sometimes the resources being offered will not be enough
@@ -132,6 +132,18 @@ func (sched *CommandScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 					Value: proto.String(cmd),
 				},
 			}
+
+			if len(src.Headers[":dockerimage"]) > 0 {
+				task.Container = &mesos.ContainerInfo{
+					Type: mesos.ContainerInfo_DOCKER.Enum(),
+					Docker: &mesos.ContainerInfo_DockerInfo{
+						Image: proto.String(src.Headers[":dockerimage"]),
+						// Network: mesos.ContainerInfo_DockerInfo_BRIDGE.Enum(),
+						// PortMappings: []*ContainerInfo_DockerInfo_PortMapping{},
+					},
+				}
+			}
+
 			fmt.Printf("[OFFER ] Prepared to launch task:%s with offer %s \n", task.GetName(), offer.Id.GetValue())
 
 			tasks = append(tasks, task)
@@ -141,7 +153,7 @@ func (sched *CommandScheduler) ResourceOffers(driver sched.SchedulerDriver, offe
 	}
 }
 
-func (sched *CommandScheduler) StatusUpdate(driver sched.SchedulerDriver, status *mesos.TaskStatus) {
+func (sched *OrgBabelScheduler) StatusUpdate(driver sched.SchedulerDriver, status *mesos.TaskStatus) {
 	fmt.Println("[STATUS] task", status.TaskId.GetValue(), " is in state ", status.State.Enum().String())
 	if status.GetState() == mesos.TaskState_TASK_FINISHED {
 		sched.tasksFinished++
@@ -165,23 +177,23 @@ func (sched *CommandScheduler) StatusUpdate(driver sched.SchedulerDriver, status
 	}
 }
 
-func (sched *CommandScheduler) OfferRescinded(sched.SchedulerDriver, *mesos.OfferID) {}
+func (sched *OrgBabelScheduler) OfferRescinded(sched.SchedulerDriver, *mesos.OfferID) {}
 
-func (sched *CommandScheduler) FrameworkMessage(sched.SchedulerDriver, *mesos.ExecutorID, *mesos.SlaveID, string) {
+func (sched *OrgBabelScheduler) FrameworkMessage(sched.SchedulerDriver, *mesos.ExecutorID, *mesos.SlaveID, string) {
 }
 
-func (sched *CommandScheduler) SlaveLost(sched.SchedulerDriver, *mesos.SlaveID) {}
+func (sched *OrgBabelScheduler) SlaveLost(sched.SchedulerDriver, *mesos.SlaveID) {}
 
-func (sched *CommandScheduler) ExecutorLost(sched.SchedulerDriver, *mesos.ExecutorID, *mesos.SlaveID, int) {
+func (sched *OrgBabelScheduler) ExecutorLost(sched.SchedulerDriver, *mesos.ExecutorID, *mesos.SlaveID, int) {
 }
 
-func (sched *CommandScheduler) Error(driver sched.SchedulerDriver, err string) {
+func (sched *OrgBabelScheduler) Error(driver sched.SchedulerDriver, err string) {
 	fmt.Println("[ERROR ] Scheduler received error:", err)
 }
 
 func init() {
 	flag.Parse()
-	fmt.Println("Initializing the Command Scheduler...")
+	fmt.Println("Initializing the Org Babel Scheduler...")
 }
 
 func parseIP(address string) net.IP {
@@ -228,7 +240,7 @@ func main() {
 	// Here we would pass the code blocks list
 	//
 	config := sched.DriverConfig{
-		Scheduler: &CommandScheduler{
+		Scheduler: &OrgBabelScheduler{
 			tasksLaunched: 0,
 			tasksFinished: 0,
 			blocks:        blocks,
